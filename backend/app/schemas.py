@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from pydantic import BaseModel
+from datetime import date
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ScoreResponse(BaseModel):
@@ -41,3 +42,20 @@ class RegisterDetails(BaseModel):
     email: str
     password: str
     full_name: Optional[str]
+
+
+class ProfileUpdate(BaseModel):
+    target_score: Optional[int] = Field(default=None, ge=10, le=90)
+    test_date: Optional[date] = None
+
+
+class FirebaseIdentityResponse(BaseModel):
+    id: int
+    uid: str
+    email: str
+    full_name: Optional[str]
+    role: str
+    target_score: Optional[int]
+    test_date: Optional[date]
+
+    model_config = ConfigDict(from_attributes=True)

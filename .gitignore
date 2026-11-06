@@ -1,4 +1,9 @@
 backend/venv/
+__pycache__/
+*.py[cod]
+backend/clearpte_local.db
+backend/clearpte_local.db-shm
+backend/clearpte_local.db-wal
 node
 node_modules
 frontend/node_modules

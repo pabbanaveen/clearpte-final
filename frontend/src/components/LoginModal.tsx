@@ -1,5 +1,5 @@
 // src/components/LoginModal.tsx
-import React, { use, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -17,19 +17,28 @@ import {
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
-  onLogin: (credentials: { email: string; password: string; name?: string }) => Promise<void>;
-  onRegister: (data: { name: string; email: string; password: string }) => Promise<void>;
+  onLogin: (credentials: { email: string; password: string; name?: string }) => Promise<AuthFormResult | void>;
+  onRegister: (data: { name: string; email: string; password: string }) => Promise<AuthFormResult | void>;
+  onResendVerification?: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
   loading?: boolean;
   selectedMode: string; // 'login' or 'register'
 }
 
-const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onLogin, onRegister, loading = false, selectedMode }) => {
+interface AuthFormResult {
+  requiresEmailVerification?: boolean;
+  email?: string;
+  message?: string;
+}
+
+const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onLogin, onRegister, onResendVerification, loading = false, selectedMode }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [localLoading, setLocalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedMode === 'register') {
@@ -43,17 +52,42 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onLogin, onRegis
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setVerificationMessage(null);
     setLocalLoading(true);
 
     try {
+      let result: AuthFormResult | void;
       if (mode === 'login') {
-        await onLogin({ email, password });
+        result = await onLogin({ email, password });
       } else {
-        await onRegister({ name, email, password });
+        result = await onRegister({ name, email, password });
+      }
+      if (result?.requiresEmailVerification) {
+        setVerificationEmail(result.email || email.trim());
+        setVerificationMessage(result.message || 'Please verify your email before continuing.');
+        setMode('login');
       }
       // success -> app will close modal
     } catch (err: any) {
       setError(err?.message || 'Authentication failed');
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!onResendVerification || !verificationEmail || !password) return;
+    setError(null);
+    setLocalLoading(true);
+    try {
+      const result = await onResendVerification(verificationEmail, password);
+      if (result.success) {
+        setVerificationMessage(result.message);
+      } else {
+        setError(result.message);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Could not resend the verification email.');
     } finally {
       setLocalLoading(false);
     }
@@ -65,6 +99,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onLogin, onRegis
     setEmail('');
     setPassword('');
     setError(null);
+    setVerificationEmail(null);
+    setVerificationMessage(null);
     onClose();
   };
 
@@ -77,6 +113,22 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onLogin, onRegis
       </DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        {verificationMessage && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {verificationMessage}
+            {verificationEmail && onResendVerification && (
+              <Box sx={{ mt: 1 }}>
+                <Button
+                  size="small"
+                  onClick={handleResendVerification}
+                  disabled={isLoading || !password}
+                >
+                  Resend verification email
+                </Button>
+              </Box>
+            )}
+          </Alert>
+        )}
 
         <form onSubmit={handleSubmit}>
           {mode === 'register' && (
@@ -139,12 +191,12 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onLogin, onRegis
           {mode === 'login' ? (
             <Typography variant="body2">
               Don’t have an account?{' '}
-              <Link component="button" variant="body2" onClick={() => setMode('register')}>Register here</Link>
+              <Link component="button" variant="body2" onClick={() => { setError(null); setMode('register'); }}>Register here</Link>
             </Typography>
           ) : (
             <Typography variant="body2">
               Already have an account?{' '}
-              <Link component="button" variant="body2" onClick={() => setMode('login')}>Login</Link>
+              <Link component="button" variant="body2" onClick={() => { setError(null); setMode('login'); }}>Login</Link>
             </Typography>
           )}
         </Box>

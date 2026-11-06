@@ -6,6 +6,5 @@ vpc_access_connector:
   name: projects/crested-athlete-471203-k7/locations/us-east1/connectors/appengine-connector-2
   egress_setting: private-ranges-only
 
-env_variables:
-  DATABASE_URL: "postgresql+psycopg2://postgres:Clearpte%40123@a14efa47-8396-4bc1-aa15-dd49b9238588.1701644d-0c79-419f-b5e1-bbae7aaf4466.asia-south1.alloydb-psc.goog:5432/postgres"
-  FIREBASE_API_KEY: "your-firebase-api-key"
+# Configure DATABASE_URL and OPENAI_API_KEY through the deployment environment
+# or a secret manager. Do not put credentials in this file.

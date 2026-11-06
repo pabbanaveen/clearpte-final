@@ -51,43 +51,56 @@ const App: React.FC = () => {
   const [loginOpen, setLoginOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authActionLoading, setAuthActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selecteOperationMode, setSelectedOperationMode] = useState<string>('');
   const [state, dispatch] = React.useReducer(reducer, initialState);
 
-  // Initialize authentication state from localStorage
+  // Restore Firebase Auth state first, then any explicitly legacy DB session.
   useEffect(() => {
-    const initAuth = () => {
+    let active = true;
+    const initAuth = async () => {
       try {
-        // setIsLoggedIn(true);
-        const { isAuthenticated, user: storedUser } = authService.initializeAuth();
+        const { isAuthenticated, user: storedUser } = await authService.initializeAuth();
 
-        if (isAuthenticated && storedUser) {
+        if (active && isAuthenticated && storedUser) {
           setIsLoggedIn(true);
           setUser(storedUser);
-        } else {
+        } else if (active) {
           setIsLoggedIn(false);
           setUser(null);
         }
-      } catch (error) {
-        console.error('Failed to initialize auth:', error);
-        setError('Failed to restore session');
-        setIsLoggedIn(false);
-        setUser(null);
+      } catch {
+        if (active) {
+          setError('Failed to restore session. Please sign in again.');
+          setIsLoggedIn(false);
+          setUser(null);
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     initAuth();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleRegister = async (data: { name: string; email: string; password: string }) => {
     try {
-      setLoading(true);
+      setAuthActionLoading(true);
       setError(null);
 
-      let response = await authService.registerWithDb(data);
+      const response = await authService.registerWithFirebase(data);
+
+      if (response.requiresEmailVerification) {
+        return {
+          requiresEmailVerification: true,
+          email: response.email || data.email,
+          message: response.message,
+        };
+      }
 
       if (response.success && response.data) {
         setUser(response.data.user);
@@ -95,22 +108,29 @@ const App: React.FC = () => {
         setLoginOpen(false);
         setError(null);
       } else {
-        setError(response.message || 'Registration failed');
+        throw new Error(response.message || 'Registration failed');
       }
     } catch (error) {
-      console.error('Registration error:', error);
-      setError('Registration failed. Please try again.');
+      throw new Error(error instanceof Error ? error.message : 'Registration failed. Please try again.');
     } finally {
-      setLoading(false);
+      setAuthActionLoading(false);
     }
   };
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
-      setLoading(true);
+      setAuthActionLoading(true);
       setError(null);
 
-      let response = await authService.loginWithDb(credentials);
+      const response = await authService.loginWithFirebase(credentials);
+
+      if (response.requiresEmailVerification) {
+        return {
+          requiresEmailVerification: true,
+          email: response.email || credentials.email,
+          message: response.message,
+        };
+      }
 
       if (response.success && response.data) {
         setUser(response.data.user);
@@ -118,19 +138,20 @@ const App: React.FC = () => {
         setLoginOpen(false);
         setError(null);
       } else {
-        setError(response.message || 'Login failed');
-        setLoginOpen(true);
+        throw new Error(response.message || 'Login failed');
       }
     } catch (error) {
-      console.error('Login error:', error);
-      setError('Login failed. Please try again.');
+      throw new Error(error instanceof Error ? error.message : 'Login failed. Please try again.');
     } finally {
-      setLoading(false);
+      setAuthActionLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    authService.logout();
+  const handleResendVerification = (email: string, password: string) =>
+    authService.resendVerificationEmail(email, password);
+
+  const handleLogout = async () => {
+    await authService.logout().catch(() => undefined);
     setUser(null);
     setIsLoggedIn(false);
     setError(null);
@@ -265,7 +286,8 @@ const App: React.FC = () => {
               onClose={() => setLoginOpen(false)}
               onLogin={handleLogin}
               onRegister={handleRegister}
-              loading={loading}
+              onResendVerification={handleResendVerification}
+              loading={authActionLoading}
               selectedMode={selecteOperationMode}
             />
 

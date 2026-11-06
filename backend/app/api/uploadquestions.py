@@ -6,6 +6,8 @@ from app.database.deps import get_db
 from typing import List
 import io
 import datetime
+import json
+import re
 
 router = APIRouter()
 
@@ -37,7 +39,7 @@ async def upload_read_aloud_questions(
         recording_time=data.get('recordingTime', 40),
         difficulty=str(data['difficulty']).replace("'", "''").strip(),
         category=str(data['category']).replace("'", "''").strip(),
-        tags=[tag.replace("'", "''").strip() for tag in str(data.get('tags', '')).split(',') if tag.strip()],
+        tags=parse_array(data.get('tags')),
         expected_answer=str(data.get('expectedAnswer', '')).replace("'", "''").strip()
       )
       questions.append(question)
@@ -78,7 +80,7 @@ async def upload_repeat_sentence_questions(
         recording_time=data.get('recordingTime', 40),
         difficulty=str(data['difficulty']).replace("'", "''").strip(),
         category=str(data['category']).replace("'", "''").strip(),
-        tags=[tag.replace("'", "''").strip() for tag in str(data['tags']).split(',')],
+        tags=parse_array(data.get('tags')),
         title=str(data['title']).replace("'", "''").strip()
       )
       questions.append(question)
@@ -121,7 +123,7 @@ async def upload_describe_image_questions(
         speaking_time=data.get('speakingTime', 40),
         difficulty=str(data['difficulty']).replace("'", "''").strip(),
         category=str(data['category']).replace("'", "''").strip(),
-        key_points=[point.replace("'", "''").strip() for point in str(data['keyPoints']).split(',')],
+        key_points=parse_array(data.get('keyPoints')),
         sample_answer=str(data['sampleAnswer']).replace("'", "''").strip(),
         title=str(data['title']).replace("'", "''").strip()
       )
@@ -162,7 +164,7 @@ async def upload_retell_lecture_questions(
         audio_url=str(data['audioUrl']).replace("'", "''").strip(),
         transcript=str(data['transcript']).replace("'", "''").strip(),
         duration=data.get('duration'),
-        key_points=[point.replace("'", "''").strip() for point in str(data['keyPoints']).split(',')],
+        key_points=parse_array(data.get('keyPoints')),
         subject=str(data['subject']).replace("'", "''").strip(),
         preparation_time=data.get('preparationTime', 10),
         speaking_time=data.get('speakingTime', 40),
@@ -205,10 +207,10 @@ async def upload_answer_short_questions(
       audio_url=str(data['audioUrl']).replace("'", "''").strip(),
       question=str(data['question']).replace("'", "''").strip(),
       correct_answer=str(data['correctAnswer']).replace("'", "''").strip(),
-      acceptable_answers=[ans.replace("'", "''").strip() for ans in str(data['acceptableAnswers']).split(';')],
+      acceptable_answers=parse_array(data.get('acceptableAnswers')),
       difficulty=str(data['difficulty']).replace("'", "''").strip(),
       category=str(data['category']).replace("'", "''").strip(),
-      tags=[tag.replace("'", "''").strip() for tag in str(data['tags']).split(',')],
+      tags=parse_array(data.get('tags')),
       title=str(data['title']).replace("'", "''").strip()
       )
       questions.append(question)
@@ -246,7 +248,7 @@ async def upload_summarize_text_questions(
       passage=str(data['passage']).replace("'", "''").strip(),
       word_limit=data.get('wordLimit', 75),
       sample_summary=str(data['sampleSummary']).replace("'", "''").strip(),
-      key_ideas=[idea.replace("'", "''").strip() for idea in str(data['keyIdeas']).split(',')],
+      key_ideas=parse_array(data.get('keyIdeas')),
       difficulty=str(data['difficulty']).replace("'", "''").strip(),
       category=str(data['category']).replace("'", "''").strip(),
       title=str(data['title']).replace("'", "''").strip()
@@ -312,13 +314,31 @@ def clean_value(value):
         return None
     return str(value).replace("'", "''").strip()
 
-def parse_array(value):
-    """Convert a semicolon or comma-delimited string into a PostgreSQL array literal."""
-    if not value:
+def parse_array(value, item_type=str):
+  """Normalize JSON arrays or legacy comma/semicolon-separated values to lists."""
+  if value is None or value == "":
+    return None
+
+  if isinstance(value, (list, tuple)):
+    items = list(value)
+  else:
+    raw_value = str(value).strip()
+    if not raw_value:
       return None
-    # Split by either semicolon or comma
-    items = [v.strip().replace("'", "''") for v in str(value).replace(';',',').split(',') if v.strip()]
-    return '{' + ','.join(items) + '}'
+    try:
+      parsed = json.loads(raw_value)
+    except (json.JSONDecodeError, TypeError):
+      parsed = None
+    if isinstance(parsed, list):
+      items = parsed
+    else:
+      items = re.split(r"[,;]", raw_value)
+
+  normalized = [str(item).strip() for item in items if str(item).strip()]
+  try:
+    return [item_type(item) for item in normalized] or None
+  except (TypeError, ValueError):
+    raise HTTPException(status_code=422, detail="Array contains an invalid value")
   
 @router.post("/upload-reading-fill-blanks-questions")
 async def upload_reading_fill_blanks_questions(
@@ -530,7 +550,7 @@ async def upload_reorder_paragraphs_questions(
         paragraph3=str(data['paragraph3']).replace("'", "''").strip(),
         paragraph4=str(data['paragraph4']).replace("'", "''").strip(),
         paragraph5=str(data.get('paragraph5', '')).replace("'", "''").strip(),
-        correct_order=parse_array(data.get('correctOrder')),
+        correct_order=parse_array(data.get('correctOrder'), int),
         time_limit=data.get('timeLimit', 600),
         difficulty=str(data['difficulty']).replace("'", "''").strip(),
         category=str(data['category']).replace("'", "''").strip()

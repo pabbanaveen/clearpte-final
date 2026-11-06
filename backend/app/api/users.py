@@ -1,50 +1,61 @@
 
-# app/api/auth_routes.py
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.database.deps import get_db
-from app.database.models import User, UserProfile
+from app.database.models import FirebaseIdentity
+from app.schemas import ProfileUpdate
+from app.services.identity_service import (
+    IdentityEmailConflict,
+    get_or_create_firebase_identity,
+)
 
 router = APIRouter()
 
-# @router.get("")
-# def get_users(db: Session = Depends(get_db)):
-#     return db.query(User).all()
-
-@router.get("/profile/{user_id}")
-def get_profile(user_id: int, db: Session = Depends(get_db)):
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    return profile
-
-@router.post("/profile/{user_id}")
-def upsert_profile(
-    user_id: int,
-    target_score: int = 0,
-    test_date: str = None,
-    db: Session = Depends(get_db)
-):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-
-    if profile:
-        profile.target_score = target_score
-        profile.test_date = test_date
-    else:
-        # Create new profile
-        profile = UserProfile(
-            user_id=user_id,
-            target_score=target_score,
-            test_date=test_date
+def _current_identity(db: Session, claims: dict) -> FirebaseIdentity:
+    try:
+        return get_or_create_firebase_identity(db, claims)
+    except IdentityEmailConflict:
+        raise HTTPException(
+            status_code=409,
+            detail="This email is already linked to a different account. Contact support.",
         )
-        db.add(profile)
+
+
+@router.get("/profile")
+def get_my_profile(
+    db: Session = Depends(get_db),
+    claims: dict = Depends(get_current_user),
+) -> dict:
+    identity = _current_identity(db, claims)
+    return {
+        "uid": identity.firebase_uid,
+        "email": identity.email,
+        "full_name": identity.full_name,
+        "role": "admin" if claims.get("admin") is True else identity.role,
+        "target_score": identity.target_score,
+        "test_date": identity.test_date,
+    }
+
+
+@router.put("/profile")
+def update_my_profile(
+    profile_update: ProfileUpdate,
+    db: Session = Depends(get_db),
+    claims: dict = Depends(get_current_user),
+) -> dict:
+    identity = _current_identity(db, claims)
+    for field, value in profile_update.model_dump(exclude_unset=True).items():
+        setattr(identity, field, value)
 
     db.commit()
-    db.refresh(profile)
-    return profile
+    db.refresh(identity)
+    return {
+        "uid": identity.firebase_uid,
+        "email": identity.email,
+        "full_name": identity.full_name,
+        "role": "admin" if claims.get("admin") is True else identity.role,
+        "target_score": identity.target_score,
+        "test_date": identity.test_date,
+    }

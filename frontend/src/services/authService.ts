@@ -1,11 +1,14 @@
-import { api } from "./api";
 import { User } from "../types";
-import { auth } from "../firebase/firebase";
+import { auth, isFirebaseConfigured } from "../firebase/firebase";
 import {
   createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  reload,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
-  UserCredential,
+  updateProfile,
+  type User as FirebaseUser,
 } from "firebase/auth";
 
 export interface LoginCredentials {
@@ -18,7 +21,6 @@ export interface RegisterData {
   name: string;
   email: string;
   password: string;
-  role?: "admin" | "user";
 }
 
 export interface AuthToken {
@@ -30,181 +32,250 @@ export type AuthResponse = {
   success: boolean;
   data?: { user: User; token: string };
   message?: string;
+  requiresEmailVerification?: boolean;
+  email?: string;
 };
 
-const API_BASE = process.env.REACT_APP_API_URL;
+const emptyProgress: NonNullable<User["progress"]> = {
+  speaking: 0,
+  writing: 0,
+  reading: 0,
+  listening: 0,
+  totalTests: 0,
+  completedTests: 0,
+  averageScore: 0,
+  strongAreas: [],
+  weakAreas: [],
+  createdAt: new Date().toISOString(),
+};
 
-const sendTokenToBackend = async (
-  userCred: UserCredential
-): Promise<AuthResponse> => {
-  const token = await userCred.user.getIdToken();
+const firebaseSetupMessage =
+  "Firebase Authentication is not configured. Add the Firebase web app settings to the frontend environment.";
 
-  const res = await api.post<{
-    status: "login" | "register";
-    uid: string;
-    email: string;
-    name?: string;
-  }>("/auth", {
-    token: token,
-  });
+const createUser = (id: string, email: string, name?: string): User => ({
+  id,
+  email,
+  name: name?.trim() || email.split("@")[0],
+  role: "user",
+  progress: { ...emptyProgress },
+});
 
-  if (res.success && res.data) {
-    const backendUser = res.data;
-    const user = {
-      id: backendUser.uid,
-      name:
-        backendUser.name ||
-        userCred.user.displayName ||
-        backendUser.email?.split("@")[0],
-      email: backendUser.email,
-      avatar: userCred.user.photoURL || "",
-      role: "user" as const,
-      progress: {
-        totalTests: 0,
-        completedTests: 0,
-        averageScore: 0,
-        strongAreas: [],
-        weakAreas: [],
-        speaking: 0,
-        writing: 0,
-        reading: 0,
-        listening: 0,
-        createdAt: new Date().toISOString(),
-      },
-      createdAt: new Date().toISOString(),
+const getStoredUser = (): User | null => {
+  try {
+    const stored = localStorage.getItem("user");
+    if (!stored) return null;
+
+    const user = JSON.parse(stored) as Partial<User>;
+    if (!user.email) return null;
+
+    return {
+      ...createUser(user.id || user.email, user.email, user.name),
+      avatar: user.avatar,
+      progress: user.progress || { ...emptyProgress },
     };
-
-    // persist
-    localStorage.setItem("authToken", token);
-    localStorage.setItem("user", JSON.stringify(user));
-
-    return { success: true, data: { user, token } };
+  } catch {
+    return null;
   }
+};
 
-  return { success: false, message: res.message || "Backend auth failed" };
+const saveFirebaseSession = (user: FirebaseUser) => {
+  const cachedUser = getStoredUser();
+  const name = user.displayName || (cachedUser?.id === user.uid ? cachedUser.name : undefined);
+  localStorage.setItem("authProvider", "firebase");
+  localStorage.removeItem("authToken");
+  localStorage.setItem("user", JSON.stringify(createUser(user.uid, user.email || "", name)));
+};
+
+const firebaseErrorMessage = (error: unknown, fallback: string): string => {
+  const code = (error as { code?: string } | null)?.code;
+  switch (code) {
+    case "auth/invalid-email":
+      return "Enter a valid email address.";
+    case "auth/user-disabled":
+      return "This account has been disabled.";
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+    case "auth/invalid-credential":
+      return "Invalid email or password.";
+    case "auth/email-already-in-use":
+      return "An account already exists for this email.";
+    case "auth/weak-password":
+      return "Choose a stronger password (at least 6 characters).";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait and try again.";
+    case "auth/network-request-failed":
+      return "Unable to reach the authentication service. Check your connection and try again.";
+    default:
+      return fallback;
+  }
 };
 
 export const authService = {
-  loginWithDb: async (credentials: LoginCredentials): Promise<AuthResponse> => {
-    try {
-      const res = await api.post<{ user: User; token: string }>(
-        `${API_BASE}/auth/login`,
-        {
-          email: credentials.email,
-          password: credentials.password,
-        }
-      );
-      if (res.success && res.data) {
-        const { user, token } = res.data;
-        localStorage.setItem("authToken", token);
-        localStorage.setItem("user", JSON.stringify(user));
-        return { success: true, data: { user, token } };
-      } else {
-        return { success: false, message: res.message || "Login failed" };
-      }
-    } catch (err: any) {
-      console.error("DB login error:", err);
-      return { success: false, message: err.message || "Login failed" };
+  loginWithFirebase: async (credentials: LoginCredentials): Promise<AuthResponse> => {
+    if (!auth || !isFirebaseConfigured) {
+      return { success: false, message: firebaseSetupMessage };
     }
-  },
 
-  registerWithDb: async (data: {
-    name: string;
-    email: string;
-    password: string;
-  }): Promise<AuthResponse> => {
     try {
-      const res = await api.post<{ user: User; token: string }>(
-        `${API_BASE}/auth/register`,
-        {
-          full_name: data.name,
-          email: data.email,
-          password: data.password,
-        }
-      );
-
-      if (res.success && res.data) {
-        const { user, token } = res.data;
-        localStorage.setItem("authToken", token);
-        localStorage.setItem("user", JSON.stringify(user));
-
-        return { success: true, data: { user, token } };
-      } else {
-        return {
-          success: false,
-          message: res.message || "Registration failed",
-        };
-      }
-    } catch (err: any) {
-      console.error("DB registration error:", err);
-      return { success: false, message: err.message || "Registration failed" };
-    }
-  },
-
-  login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
-    try {
-      const userCred = await signInWithEmailAndPassword(
+      const credential = await signInWithEmailAndPassword(
         auth,
-        credentials.email,
+        credentials.email.trim(),
         credentials.password
       );
-      return await sendTokenToBackend(userCred);
-    } catch (err: any) {
-      console.error("Firebase login error:", err.code, err.message);
-      return { success: false, message: err.message || "Login failed" };
+      if (!credential.user.emailVerified) {
+        await signOut(auth);
+        authService.clearSession();
+        return {
+          success: false,
+          requiresEmailVerification: true,
+          email: credential.user.email || credentials.email.trim(),
+          message: "Verify your email address before signing in. You can resend the verification email below.",
+        };
+      }
+
+      const token = await credential.user.getIdToken();
+      saveFirebaseSession(credential.user);
+      return {
+        success: true,
+        data: {
+          user: createUser(
+            credential.user.uid,
+            credential.user.email || credentials.email,
+            credential.user.displayName || credentials.name
+          ),
+          token,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: firebaseErrorMessage(error, "Login failed. Please try again."),
+      };
     }
   },
 
-  register: async (data: {
-    name: string;
-    email: string;
-    password: string;
-  }): Promise<AuthResponse> => {
+  registerWithFirebase: async (data: RegisterData): Promise<AuthResponse> => {
+    if (!auth || !isFirebaseConfigured) {
+      return { success: false, message: firebaseSetupMessage };
+    }
+
     try {
-      const userCred = await createUserWithEmailAndPassword(
+      const credential = await createUserWithEmailAndPassword(
         auth,
-        data.email,
+        data.email.trim(),
         data.password
       );
-      // Optionally update displayName here using updateProfile if you want
-      return await sendTokenToBackend(userCred);
-    } catch (err: any) {
-      return { success: false, message: err.message || "Registration failed" };
+      try {
+        await updateProfile(credential.user, { displayName: data.name.trim() });
+      } catch {
+        // Account creation succeeded; keep the entered name in the local profile.
+      }
+      await sendEmailVerification(credential.user);
+      await signOut(auth);
+      authService.clearSession();
+      return {
+        success: true,
+        requiresEmailVerification: true,
+        email: credential.user.email || data.email.trim(),
+        message: "Account created. Check your inbox and verify your email before signing in.",
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: firebaseErrorMessage(error, "Registration failed. Please try again."),
+      };
     }
   },
 
-  logout: async () => {
-    try {
-      await signOut(auth);
-    } catch (e) {
-      console.warn("Firebase signOut error", e);
+  resendVerificationEmail: async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; message: string }> => {
+    if (!auth || !isFirebaseConfigured) {
+      return { success: false, message: firebaseSetupMessage };
     }
+
+    try {
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      if (credential.user.emailVerified) {
+        await signOut(auth);
+        authService.clearSession();
+        return { success: true, message: "Your email is verified. You can sign in now." };
+      }
+
+      await sendEmailVerification(credential.user);
+      await signOut(auth);
+      authService.clearSession();
+      return { success: true, message: "Verification email sent. Check your inbox and spam folder." };
+    } catch (error) {
+      return {
+        success: false,
+        message: firebaseErrorMessage(error, "Could not send the verification email. Please try again."),
+      };
+    }
+  },
+
+  logout: async (): Promise<void> => {
+    if (auth?.currentUser) {
+      try {
+        await signOut(auth);
+      } finally {
+        authService.clearSession();
+      }
+      return;
+    }
+    authService.clearSession();
+  },
+
+  clearSession: () => {
+    localStorage.removeItem("authProvider");
     localStorage.removeItem("authToken");
     localStorage.removeItem("user");
-    window.location.href = "/";
   },
 
   getCurrentUser: (): User | null => {
-    const userStr = localStorage.getItem("user");
-    return userStr ? JSON.parse(userStr) : null;
+    return getStoredUser();
   },
 
   isAuthenticated: (): boolean => {
-    const token = localStorage.getItem("authToken");
-    const user = localStorage.getItem("user");
-    return !!(token && user);
+    return !!auth?.currentUser?.emailVerified;
   },
 
-  isAdmin: (): boolean => {
-    const user = authService.getCurrentUser();
-    // return true;
-    return user?.role === "admin";
-  },
+  // Admin UI stays disabled until the backend exposes verified role claims.
+  isAdmin: (): boolean => false,
 
-  initializeAuth: (): { isAuthenticated: boolean; user: User | null } => {
-    const isAuthenticated = authService.isAuthenticated();
-    const user = isAuthenticated ? authService.getCurrentUser() : null;
+  initializeAuth: async (): Promise<{ isAuthenticated: boolean; user: User | null }> => {
+    const configuredAuth = auth;
+    if (configuredAuth) {
+      const firebaseUser = configuredAuth.currentUser || await new Promise<FirebaseUser | null>((resolve, reject) => {
+        let unsubscribe: (() => void) | undefined;
+        unsubscribe = onAuthStateChanged(
+          configuredAuth,
+          (user) => {
+            unsubscribe?.();
+            resolve(user);
+          },
+          (error) => {
+            unsubscribe?.();
+            reject(error);
+          }
+        );
+      });
 
-    return { isAuthenticated, user };
+      if (firebaseUser) {
+        await reload(firebaseUser);
+        if (!firebaseUser.emailVerified) {
+          await signOut(configuredAuth);
+          authService.clearSession();
+          return { isAuthenticated: false, user: null };
+        }
+        saveFirebaseSession(firebaseUser);
+        return { isAuthenticated: true, user: authService.getCurrentUser() };
+      }
+
+      authService.clearSession();
+    }
+
+    return { isAuthenticated: false, user: null };
   },
 };

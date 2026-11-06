@@ -1,5 +1,8 @@
+declare var process: { env: Record<string, string | undefined> };
+
 import axios from 'axios';
 import { ApiResponse, PaginatedResponse } from '../types';
+import { auth } from '../firebase/firebase';
 
 const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 
@@ -14,8 +17,10 @@ const apiClient = axios.create({
 
 // Request interceptor for auth token
 apiClient.interceptors.request.use(
-  (config:any) => {
-    const token = localStorage.getItem('authToken');
+  async (config: any) => {
+    const token = auth?.currentUser?.emailVerified
+      ? await auth.currentUser.getIdToken()
+      : null;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -54,13 +59,12 @@ export const api = {
 
    post: async <T>(url: string, data?: any, headers?: any): Promise<ApiResponse<T>> => {
     try {
-      console.log("POST", url, data);
       const response = await apiClient.post(url, data, { headers });
       return { success: true, data: response.data };
     } catch (error: any) {
       return { 
         success: false, 
-        error: error.response?.data?.message || error.message 
+        error: error.response?.data?.detail || error.response?.data?.message || error.message
       };
     }
   },

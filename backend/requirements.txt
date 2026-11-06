@@ -5,6 +5,7 @@ python-dotenv
 python-multipart
 firebase-admin
 sqlalchemy
+alembic
 psycopg2-binary
 debugpy
 openai

@@ -1,4 +1,10 @@
---speaking module tables
+-- LEGACY DRAFT ONLY — DO NOT EXECUTE.
+-- The canonical active schema is defined by app/database/models.py and the
+-- versioned Alembic migrations under migrations/versions. This historical SQL
+-- sketch includes unimplemented tables and differs from the active ORM schema.
+-- Apply changes with Alembic; review/extend the models and migration chain first.
+
+-- speaking module tables
 CREATE TABLE read_aloud_question (
     id SERIAL PRIMARY KEY,
     title VARCHAR(255),                      

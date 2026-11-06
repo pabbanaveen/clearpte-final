@@ -7,9 +7,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-openai_client = openai.OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
+_api_key = os.getenv("OPENAI_API_KEY")
+openai_client = openai.OpenAI(api_key=_api_key, timeout=60, max_retries=1) if _api_key else None
+
+
+def _get_openai_client():
+    if openai_client is None:
+        raise RuntimeError("Set OPENAI_API_KEY to use AI evaluation features.")
+    return openai_client
 
 
 def similarity_score(a: str, b: str) -> float:
@@ -36,7 +41,7 @@ def evaluate_against_text(reference_text: str, user_text: str, max_scores: dict)
     }}
     """
 
-    response = openai_client.chat.completions.create(
+    response = _get_openai_client().chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "user", "content": prompt}
@@ -73,7 +78,7 @@ def evaluate_against_image(image_path: str, user_text: str, max_scores: dict) ->
     }}
     """
 
-    response = openai_client.chat.completions.create(
+    response = _get_openai_client().chat.completions.create(
         model="gpt-4-vision-preview",
         messages=[
             {

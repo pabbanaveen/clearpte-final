@@ -21,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],          # allow all headers
 )
 
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api")
 
 @app.get("/")
 def root():

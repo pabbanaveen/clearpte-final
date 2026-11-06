@@ -1,16 +1,33 @@
+declare var process: { env: Record<string, string | undefined> };
+
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getAnalytics } from "firebase/analytics";
+import { getAuth, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyB-TSYkmxWlhIf4YyXYe9wBXBZ7GNqhag8",
-  authDomain: "clear-pte-ff08c.firebaseapp.com",
-  projectId: "clear-pte-ff08c",
-  storageBucket: "clear-pte-ff08c.firebasestorage.app",
-  messagingSenderId: "321338802997",
-  appId: "1:321338802997:web:7936d3195a92da7b7a427c"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
+const requiredConfig = [
+  firebaseConfig.apiKey,
+  firebaseConfig.authDomain,
+  firebaseConfig.projectId,
+  firebaseConfig.appId,
+];
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+export const isFirebaseConfigured = requiredConfig.every(
+  (value) => typeof value === "string" && value.trim().length > 0
+);
+
+let firebaseAuth: Auth | null = null;
+
+if (isFirebaseConfigured) {
+  const app = initializeApp(firebaseConfig);
+  firebaseAuth = getAuth(app);
+}
+
+export const auth = firebaseAuth;
