@@ -1,18 +1,22 @@
+import logging
+import os
+import re
+import tempfile
+from difflib import SequenceMatcher
+
 from fastapi import APIRouter, UploadFile, Form, File, HTTPException
 from app.schemas import EvaluationResult, MaxScores
 from fastapi.responses import JSONResponse
 from app.services.openai_client import (
-    openai_client,
+    _get_openai_client,
     evaluate_against_text,
     evaluate_against_image
 )
-import tempfile
 import json
-import os
-import re
-from difflib import SequenceMatcher
+from app.core.uploads import read_audio_upload
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/evaluate-short-answer")
 async def evaluate_answer(
@@ -27,10 +31,10 @@ async def evaluate_answer(
 
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_file:
-            tmp_file.write(await audio.read())
+            tmp_file.write(await read_audio_upload(audio))
             tmp_file_path = tmp_file.name
 
-        transcription = openai_client.audio.transcriptions.create(
+        transcription = _get_openai_client().audio.transcriptions.create(
             model="whisper-1",
             file=open(tmp_file_path, "rb")
         )
@@ -70,7 +74,7 @@ async def evaluate_answer(
         """
 
         # STEP 3: Ask GPT to evaluate
-        gpt_response = openai_client.chat.completions.create(
+        gpt_response = _get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a precise and fair evaluator for spoken answers."},
@@ -100,8 +104,11 @@ async def evaluate_answer(
         os.remove(tmp_file_path)
         return JSONResponse(content=result)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Short-answer evaluation request failed")
+        raise HTTPException(status_code=502, detail="Evaluation service is temporarily unavailable")
 
     finally:
         if tmp_file_path and os.path.exists(tmp_file_path):
@@ -119,10 +126,10 @@ async def evaluate_from_image(
     tmp_audio_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as audio_tmp:
-            audio_tmp.write(await audio.read())
+            audio_tmp.write(await read_audio_upload(audio))
             tmp_audio_path = audio_tmp.name
 
-        transcription = openai_client.audio.transcriptions.create(
+        transcription = _get_openai_client().audio.transcriptions.create(
             model="whisper-1",
             file=open(tmp_audio_path, "rb")
         )
@@ -132,7 +139,7 @@ async def evaluate_from_image(
 You are an expert visual analyst. Analyze this image and summarize its visual meaning and key elements in 2-3 sentences.
 Focus on what it shows and its general context.
 """
-        image_analysis_resp = openai_client.chat.completions.create(
+        image_analysis_resp = _get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
@@ -203,7 +210,7 @@ Focus on what it shows and its general context.
         """
 
 
-        llm_resp = openai_client.chat.completions.create(
+        llm_resp = _get_openai_client().chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
@@ -247,8 +254,11 @@ Focus on what it shows and its general context.
 
         return JSONResponse(result)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Describe-image evaluation request failed")
+        raise HTTPException(status_code=502, detail="Evaluation service is temporarily unavailable")
 
     finally:
         if tmp_audio_path and os.path.exists(tmp_audio_path):
@@ -268,10 +278,10 @@ async def evaluate_retell(
 
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_file:
-            tmp_file.write(await audio.read())
+            tmp_file.write(await read_audio_upload(audio))
             tmp_file_path = tmp_file.name
 
-        transcription = openai_client.audio.transcriptions.create(
+        transcription = _get_openai_client().audio.transcriptions.create(
             model="whisper-1",
             file=open(tmp_file_path, "rb")
         )
@@ -323,7 +333,7 @@ async def evaluate_retell(
         • Focus on encouragement and clarity  
         """
 
-        gpt_response = openai_client.chat.completions.create(
+        gpt_response = _get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a fair and constructive English speech examiner."},
@@ -350,9 +360,11 @@ async def evaluate_retell(
         }
         os.remove(tmp_file_path)
         return JSONResponse(content=result)
-    except Exception as e:
-        print("Error processing audio:", e)
-        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Retell evaluation request failed")
+        raise HTTPException(status_code=502, detail="Evaluation service is temporarily unavailable")
     
 @router.post("/evaluate-summary")
 async def evaluate_summary(
@@ -428,7 +440,7 @@ async def evaluate_summary(
         """
 
         # STEP 4 — Get GPT evaluation
-        gpt_response = openai_client.chat.completions.create(
+        gpt_response = _get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a fair and constructive English writing evaluator."},
@@ -458,9 +470,11 @@ async def evaluate_summary(
 
         return JSONResponse(content=result)
 
-    except Exception as e:
-        print("Error evaluating summary:", e)
-        raise HTTPException(status_code=500, detail=f"Error evaluating summary: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Summary evaluation request failed")
+        raise HTTPException(status_code=502, detail="Evaluation service is temporarily unavailable")
     
 @router.post("/evaluate-essay")
 async def evaluate_essay(
@@ -543,7 +557,7 @@ async def evaluate_essay(
         """
 
         # STEP 4 — Query OpenAI model
-        gpt_response = openai_client.chat.completions.create(
+        gpt_response = _get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a fair and constructive essay evaluator."},
@@ -580,6 +594,8 @@ async def evaluate_essay(
 
         return JSONResponse(content=result)
 
-    except Exception as e:
-        print("Error evaluating essay:", e)
-        raise HTTPException(status_code=500, detail=f"Error evaluating essay: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Essay evaluation request failed")
+        raise HTTPException(status_code=502, detail="Evaluation service is temporarily unavailable")

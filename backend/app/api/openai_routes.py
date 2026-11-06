@@ -1,11 +1,14 @@
+import logging
 from fastapi import APIRouter, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 import tempfile, os, re
 from difflib import SequenceMatcher
 from typing import List, Dict, Optional
-from app.services.openai_client import openai_client
+from app.services.openai_client import _get_openai_client
+from app.core.uploads import read_audio_upload
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def normalize_token(tok: str) -> str:
     return re.sub(r"[^\w']+", "", tok).lower().strip()
@@ -221,10 +224,10 @@ async def compare_audio(
     tmp_file_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_file:
-            tmp_file.write(await audio.read())
+            tmp_file.write(await read_audio_upload(audio))
             tmp_file_path = tmp_file.name
 
-        transcription = openai_client.audio.transcriptions.create(
+        transcription = _get_openai_client().audio.transcriptions.create(
             model="whisper-1",
             file=open(tmp_file_path, "rb")
         )
@@ -278,7 +281,7 @@ async def compare_audio(
         """
 
 
-        llm_resp = openai_client.chat.completions.create(
+        llm_resp = _get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": analysis_prompt}],
             temperature=0,
@@ -303,9 +306,11 @@ async def compare_audio(
 
         return JSONResponse(result)
 
-    except Exception as e:
-        print("Error processing audio:", e)
-        raise HTTPException(status_code=500, detail=f"Failed to process audio: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Read Aloud comparison request failed")
+        raise HTTPException(status_code=502, detail="Evaluation service is temporarily unavailable")
     finally:
         try:
             if tmp_file_path and os.path.exists(tmp_file_path):
@@ -326,9 +331,9 @@ async def compare_audio(
     tmp_file_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_file:
-            tmp_file.write(await audio.read())
+            tmp_file.write(await read_audio_upload(audio))
             tmp_file_path = tmp_file.name
-        transcription = openai_client.audio.transcriptions.create(
+        transcription = _get_openai_client().audio.transcriptions.create(
             model="whisper-1",
             file=open(tmp_file_path, "rb")
         )
@@ -358,7 +363,7 @@ async def compare_audio(
         Bad/Missed: {{W}} word(s)
         """
 
-        rs_resp = openai_client.chat.completions.create(
+        rs_resp = _get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": repeat_sentence_prompt}],
             temperature=0,
@@ -385,7 +390,7 @@ async def compare_audio(
         }}
         """
 
-        score_resp = openai_client.chat.completions.create(
+        score_resp = _get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": scoring_prompt}],
             temperature=0,
@@ -407,9 +412,11 @@ async def compare_audio(
 
         return JSONResponse(result)
 
-    except Exception as e:
-        print("Error processing audio:", e)
-        raise HTTPException(status_code=500, detail=f"Failed to process audio: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Repeat Sentence comparison request failed")
+        raise HTTPException(status_code=502, detail="Evaluation service is temporarily unavailable")
     finally:
         try:
             if tmp_file_path and os.path.exists(tmp_file_path):

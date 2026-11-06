@@ -1,8 +1,11 @@
-import openai
-from app.schemas import EvaluationScore
 import base64
+import json
+import math
 import os
+
+import openai
 from dotenv import load_dotenv
+from app.schemas import EvaluationScore
 
 
 load_dotenv()
@@ -22,6 +25,31 @@ def similarity_score(a: str, b: str) -> float:
     b_words = b.lower().split()
     intersection = [word for word in a_words if word in b_words]
     return (len(intersection) / max(len(a_words), len(b_words))) * 100
+
+
+class ScoringResponseError(ValueError):
+    """The model response is not a valid bounded score object."""
+
+
+def _parse_score_json(response_text: str, required_fields: set[str]) -> dict[str, float]:
+    """Parse strict JSON scores only; never execute model output as Python."""
+    try:
+        parsed = json.loads(response_text)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ScoringResponseError("Scoring provider returned invalid JSON.") from exc
+
+    if not isinstance(parsed, dict) or set(parsed) != required_fields:
+        raise ScoringResponseError("Scoring provider returned an invalid score schema.")
+
+    scores: dict[str, float] = {}
+    for field in required_fields:
+        value = parsed[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ScoringResponseError("Scoring provider returned a non-numeric score.")
+        if not math.isfinite(value) or value < 0 or value > 90:
+            raise ScoringResponseError("Scoring provider returned an out-of-range score.")
+        scores[field] = float(value)
+    return scores
 
 
 def evaluate_against_text(reference_text: str, user_text: str, max_scores: dict) -> EvaluationScore:
@@ -48,10 +76,10 @@ def evaluate_against_text(reference_text: str, user_text: str, max_scores: dict)
         ]
     )
 
-    try:
-        parsed = eval(response.choices[0].message.content)
-    except Exception:
-        parsed = {"fluency": 0, "pronunciation": 0}
+    parsed = _parse_score_json(
+        response.choices[0].message.content,
+        {"fluency", "pronunciation"},
+    )
 
     return EvaluationScore(
         content=min(content_score, max_scores['content']),
@@ -92,10 +120,10 @@ def evaluate_against_image(image_path: str, user_text: str, max_scores: dict) ->
         max_tokens=300
     )
 
-    try:
-        parsed = eval(response.choices[0].message.content)
-    except Exception:
-        parsed = {"content": 0, "fluency": 0, "pronunciation": 0}
+    parsed = _parse_score_json(
+        response.choices[0].message.content,
+        {"content", "fluency", "pronunciation"},
+    )
 
     return EvaluationScore(
         content=min(parsed.get("content", 0), max_scores['content']),

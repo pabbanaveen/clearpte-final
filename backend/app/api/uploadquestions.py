@@ -8,8 +8,10 @@ import io
 import datetime
 import json
 import re
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/upload-read-aloud-questions")
 async def upload_read_aloud_questions(
@@ -50,8 +52,11 @@ async def upload_read_aloud_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} read aloud questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 @router.post("/upload-repeat-sentence-questions")
 async def upload_repeat_sentence_questions(
@@ -91,8 +96,11 @@ async def upload_repeat_sentence_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} repeat sentence questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 
 @router.post("/upload-describe-image-questions")
@@ -135,8 +143,11 @@ async def upload_describe_image_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} describe image questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 @router.post("/upload-retell-lecture-questions")
 async def upload_retell_lecture_questions(
@@ -180,8 +191,11 @@ async def upload_retell_lecture_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} retell lecture questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 
 @router.post("/upload-answer-short-question-questions")
@@ -221,8 +235,11 @@ async def upload_answer_short_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} answer short questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 
 @router.post("/upload-summarize-text-questions")
@@ -261,8 +278,11 @@ async def upload_summarize_text_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} summarize text questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 @router.post("/upload-write-essay-questions")
 async def upload_write_essay_questions(
@@ -305,8 +325,11 @@ async def upload_write_essay_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} write essay questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 def clean_value(value):
     """Return sanitized string (or None if missing)."""
@@ -385,8 +408,11 @@ async def upload_reading_fill_blanks_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} reading fill blanks questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 @router.post("/upload-reading-fill-blanks-rw-questions")
 async def upload_reading_fill_blanks_rw_questions(
@@ -429,8 +455,11 @@ async def upload_reading_fill_blanks_rw_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} reading fill blanks RW questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 
 @router.post("/upload-multiple-choice-multiple-questions")
@@ -476,8 +505,11 @@ async def upload_multiple_choice_multiple_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} multiple choice multiple questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 @router.post("/upload-multiple-choice-single-questions")
 async def upload_multiple_choice_single_questions(
@@ -520,8 +552,11 @@ async def upload_multiple_choice_single_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} multiple choice single questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 
 @router.post("/upload-reorder-paragraphs-questions")
@@ -563,8 +598,11 @@ async def upload_reorder_paragraphs_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} reorder paragraphs questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 @router.post("/upload-summarize-spoken-text-questions")
 async def upload_summarize_spoken_text_questions(
@@ -605,8 +643,11 @@ async def upload_summarize_spoken_text_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} summarize spoken text questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 @router.post("/upload-listening-multiple-choice-multiple-questions")
 async def upload_listening_multiple_choice_multiple_questions(
@@ -650,8 +691,11 @@ async def upload_listening_multiple_choice_multiple_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} listening multiple choice multiple questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 @router.post("/upload-listening-multiple-choice-single-questions")
 async def upload_listening_multiple_choice_single_questions(
@@ -694,8 +738,11 @@ async def upload_listening_multiple_choice_single_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} listening multiple choice single questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 @router.post("/upload-listening-fill-blanks-questions")
 async def upload_listening_fill_blanks_questions(
@@ -741,8 +788,11 @@ async def upload_listening_fill_blanks_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} listening fill blanks questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 
 @router.post("/upload-highlight-correct-summary-questions")
 async def upload_highlight_correct_summary_questions(
@@ -783,8 +833,11 @@ async def upload_highlight_correct_summary_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} highlight correct summary questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 @router.post("/upload-select-missing-word-questions")
 async def upload_select_missing_word_questions(
@@ -827,8 +880,11 @@ async def upload_select_missing_word_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} select missing word questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 
 @router.post("/upload-highlight-incorrect-words-questions")
@@ -867,8 +923,11 @@ async def upload_highlight_incorrect_words_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} highlight incorrect words questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
   
 
 @router.post("/upload-write-from-dictation-questions")
@@ -907,6 +966,9 @@ async def upload_write_from_dictation_questions(
     
     return {"message": f"Successfully uploaded {len(questions)} write from dictation questions"}
     
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+  except HTTPException:
+    raise
+  except Exception:
+    logger.error("Question import failed")
+    raise HTTPException(status_code=500, detail="Question import failed")
 

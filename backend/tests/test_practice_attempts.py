@@ -175,6 +175,20 @@ class ReadAloudPracticeApiTests(unittest.TestCase):
         with self.session_factory() as session:
             self.assertEqual(session.query(PracticeAttempt).count(), 0)
 
+    def test_missing_openai_configuration_maps_to_safe_provider_error(self):
+        with patch(
+            "app.api.practice_routes.score_read_aloud",
+            side_effect=ScoringUnavailableError("provider configuration absent"),
+        ):
+            response = self.client.post(
+                f"/api/practice/read-aloud/{self.question_id}/attempts",
+                headers=self.idempotency_headers,
+                files={"audio": ("answer.webm", b"fake audio bytes", "audio/webm")},
+            )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertNotIn("provider configuration absent", response.text)
+
     def test_unknown_question_does_not_invoke_provider(self):
         with patch("app.api.practice_routes.score_read_aloud") as score:
             response = self.client.post(

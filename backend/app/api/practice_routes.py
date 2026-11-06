@@ -8,8 +8,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.auth import get_current_user
+from app.core.uploads import read_audio_upload
 from app.database.deps import get_db
 from app.database.models import PracticeAttempt, ReadAloudQuestion
 from app.services.identity_service import (
@@ -27,13 +29,6 @@ from app.services.read_aloud_scoring import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-MAX_READ_ALOUD_AUDIO_BYTES = 10 * 1024 * 1024
-ALLOWED_AUDIO_TYPES = {
-    "audio/webm", "audio/wav", "audio/x-wav", "audio/mpeg",
-    "audio/mp4", "audio/ogg", "audio/aac",
-}
-
-
 class PracticeAttemptResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -101,22 +96,19 @@ async def submit_read_aloud_attempt(
             raise HTTPException(status_code=409, detail="Idempotency-Key was already used")
         return previous_attempt
 
-    content_type = (audio.content_type or "").split(";")[0].strip().lower()
-    if content_type not in ALLOWED_AUDIO_TYPES:
-        raise HTTPException(status_code=415, detail="Unsupported audio type")
-
     question = db.query(ReadAloudQuestion).filter(ReadAloudQuestion.id == question_id).one_or_none()
     if question is None:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    audio_bytes = await audio.read(MAX_READ_ALOUD_AUDIO_BYTES + 1)
-    if not audio_bytes:
-        raise HTTPException(status_code=400, detail="Audio file is empty")
-    if len(audio_bytes) > MAX_READ_ALOUD_AUDIO_BYTES:
-        raise HTTPException(status_code=413, detail="Audio file exceeds the 10 MB limit")
+    audio_bytes = await read_audio_upload(audio)
 
     try:
-        result = score_read_aloud(audio_bytes, audio.filename or "answer.webm", question.text)
+        result = await run_in_threadpool(
+            score_read_aloud,
+            audio_bytes,
+            audio.filename or "answer.webm",
+            question.text,
+        )
     except ScoringUnavailableError:
         logger.warning("Read Aloud scoring provider failed for question_id=%s", question_id)
         raise HTTPException(

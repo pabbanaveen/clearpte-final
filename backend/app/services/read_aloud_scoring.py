@@ -36,11 +36,11 @@ class ScoringUnavailableError(Exception):
 
 def score_read_aloud(audio_bytes: bytes, filename: str, reference_text: str) -> dict[str, Any]:
     """Transcribe and score audio; callers should never persist audio or transcript by default."""
-    client = _get_openai_client()
     audio_file = BytesIO(audio_bytes)
     audio_file.name = filename
 
     try:
+        client = _get_openai_client()
         transcription = client.audio.transcriptions.create(
             model=TRANSCRIPTION_MODEL,
             file=audio_file,

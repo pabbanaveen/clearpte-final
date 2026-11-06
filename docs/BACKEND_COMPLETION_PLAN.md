@@ -45,9 +45,22 @@
 
 - [ ] Normalize API errors, schemas, pagination, status codes, and OpenAPI contracts across all route families.
 - [ ] Fix profile contract/ownership and seed/import workflows. Validate bulk imports, transactions, duplicates, and audit records.
-- [ ] Add request/audio size and MIME/duration controls, safe temporary-file cleanup, AI quotas/rate limits, timeouts, retries only where safe, and cost monitoring.
-- [ ] Ensure protected endpoints do not expose correct answers or internal exceptions. Make health/readiness diagnostics safe.
+- [x] Add 10 MB audio and MIME limits to the legacy evaluation/audio-comparison routes, use the guarded OpenAI client with bounded timeout/retries, and move blocking Read Aloud scoring off the async event loop.
+- [x] Replace model-output `eval()` with strict JSON and range checks; sanitize errors from evaluation and question-upload routes.
+- [ ] Add global request-body limits, per-user AI quotas/rate limits, request budget ceilings, cost monitoring, and duration validation.
+- [ ] Ensure every remaining endpoint has typed schemas and safe error handling; review bulk-import duplicate/idempotency and transaction semantics. Health/readiness and learner answer-key filtering are already addressed.
 - [ ] Build backend unit/integration/authorization/migration tests with paid AI mocked.
+
+## Still required before backend staging
+
+- [ ] Configure and verify real Firebase Admin ADC/project settings with a real verified test-account token. Current auth tests mock Firebase verification.
+- [ ] Provision a new staging PostgreSQL database and test Alembic upgrade/connection/readiness there; SQLite is the only migration target validated to date.
+- [ ] Add persistent attempts/history and validated contracts for each supported task type; only Read Aloud currently has a complete backend-scored persisted attempt route.
+- [ ] Add per-user scoring quotas/rate limits, a spend ceiling, and monitored provider usage. The 10 MB media cap is not a cost quota.
+- [ ] Review/validate JSON response schemas and score ranges for every legacy writing/speaking evaluation route; safely reject malformed model output.
+- [ ] Create a trusted admin custom-claim grant/revoke process and prove admin imports succeed only for approved identities.
+- [ ] Fix all import-route transaction rollback, duplicate detection, and realistic error-report behavior; run route-level tests for each content type.
+- [ ] Confirm backup/restore for PostgreSQL, staging config/secrets/CORS, and Cloud Run service identity. Do not deploy production until owner approves cloud billing and launch.
 
 ### Phase E — Staging backend deployment gate
 
